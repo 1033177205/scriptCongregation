@@ -50,8 +50,8 @@ fi
 #################################
 ########   1:配置文件 ############
 #################################
-cfg_history_list=".history_list_txt"
-cfg_history_list_count=".history_list_count_txt"
+cfg_history_list="/tmp/.history_list_txt"
+cfg_history_list_count="/tmp/.history_list_count_txt"
 
 
 #################################
