@@ -14,9 +14,14 @@
 # @brief    添加支持文件类型参数，目前支持c/c++
 # @date		2021-01-27
 # @brief    简化代码模板，并支持保存10条历史命令
+# @date		2021-02-02
+# @brief    对整体代码进行优化，并支持c/c++/go文件创建
 ###################################################
 
 
+#################################
+########   0:帮助信息 ############
+#################################
 help()
 {
     cat <<EOF
@@ -41,23 +46,23 @@ if [ "-h" == "$1" ] || [ "--help" == "$1" ];then
     exit 1
 fi
 
-file_name=null
-file_comment=""
-file_path=null
-file_type=null
-#地址 可以手动修改，也可以传参
-addr="HOME 深圳龙华"
-OnlyHead=no
-cover=no
-history_list_txt=".history_list_txt"
-history_list_count_txt=".history_list_count_txt"
 
+#################################
+########   1:配置文件 ############
+#################################
+cfg_history_list=".history_list_txt"
+cfg_history_list_count=".history_list_count_txt"
+
+
+#################################
+########   2:函数定义区 ##########
+#################################
 history_list()
 {
-    if [ ! -e ${history_list_txt} ];then
+    if [ ! -e ${cfg_history_list} ];then
         echo "历史列表为空"
     else
-        echo | cat ${history_list_txt}
+        echo | cat ${cfg_history_list}
     fi
 
     exit 0
@@ -66,54 +71,68 @@ history_list()
 save_history_list()
 {
     cmd=$*
-    if [ ! -e ${history_list_count_txt} ];then
+    if [ ! -e ${cfg_history_list_count} ];then
         cmd_count=0
-        echo $cmd_count > ${history_list_count_txt}
+        echo $cmd_count > ${cfg_history_list_count}
     else
-        cmd_count=`cat ${history_list_count_txt}`
+        cmd_count=`cat ${cfg_history_list_count}`
     fi
-    echo "cmd_count $cmd_count $cmd"
+    # echo "cmd_count $cmd_count $cmd"
 
-    if [ ! -e ${history_list_txt} ];then
-        echo $cmd > ${history_list_txt}
+    if [ ! -e ${cfg_history_list} ];then
+        echo $cmd > ${cfg_history_list}
         let cmd_count++
     elif [ $cmd_count -lt 10 ];then
-        sed -i "1i${cmd}" ${history_list_txt}
+        sed -i "1i${cmd}" ${cfg_history_list}
         let cmd_count++
     else
         let cmd_count=10
-        sed -i '$d' ${history_list_txt}
-        sed -i "1i${cmd}" ${history_list_txt}
+        sed -i '$d' ${cfg_history_list}
+        sed -i "1i${cmd}" ${cfg_history_list}
     fi
 
-    echo $cmd_count > ${history_list_count_txt}
+    echo $cmd_count > ${cfg_history_list_count}
 }
 
-# 匹配变量
+
+#################################
+########   3:参数处理 ############
+#################################
+# 3.0 参数定义
+opt_file_name=null
+opt_file_comment=""
+opt_file_path=null
+opt_file_type=null
+opt_OnlyHead=no
+opt_cover=no
+opt_addr="HOME 深圳龙华"        #地址 可以手动修改，也可以传参
+opt_history=""
+
+# 3.1 获取参数变量
 for opt do
     optarg="${opt#*=}"
-    echo "opt ${opt} $optarg"
+    # echo "opt ${opt} $optarg"
     case "$opt" in
         --name=*)
-            file_name="$optarg"
+            opt_file_name="$optarg"
             ;;
         --comment=*)
-            file_comment="$optarg"
+            opt_file_comment="$optarg"
             ;;
         --path=*)
-            file_path="$optarg"
+            opt_file_path="$optarg"
             ;;
         --type=*)
-            file_type="$optarg"
+            opt_file_type="$optarg"
             ;;
         --OnlyHead*)
-            OnlyHead=yes
+            opt_OnlyHead=yes
             ;;
         --cover*)
-            cover=yes
+            opt_cover=yes
             ;;
         --addr=*)
-            addr="$optarg"
+            opt_addr="$optarg"
             ;;
         --history*)
             history_list
@@ -124,118 +143,153 @@ for opt do
     esac
 done
 
-echo "file_name ${file_name}"
-echo "file_comment ${file_comment}"
-echo "file_path ${file_path}"
-echo "file_type ${file_type}"
-echo "addr ${addr}"
-echo "OnlyHead ${OnlyHead}"
-echo "cover ${cover}"
+# 3.3 参数打印
+echo "file_name ${opt_file_name}"
+echo "file_comment ${opt_file_comment}"
+echo "file_path ${opt_file_path}"
+echo "file_type ${opt_file_type}"
+echo "OnlyHead ${opt_OnlyHead}"
+echo "cover ${opt_cover}"
+echo "addr ${opt_addr}"
 
-if [ "$file_name" == "null" ]; then
-    echo "Option name can not be null"
+# 3.4 判断参数是否正确
+if [ "$opt_file_name" == "null" ]; then
+    echo "[options] name can not be null"
     help
     exit 1
 fi
 
-# 保存历史列表
+
+#################################
+########   4:处理逻辑 ###########
+#################################
+# 4.1 保存历史列表
 save_history_list $0 $*
 
-# 创建文件夹
-if [ x"$file_path" != x"null" ];then
-    if [ ! -d $file_path ];then
-        mkdir -p $file_path
-        cd $file_path
-        echo `pwd`
-    else
-        cd $file_path
-        echo `pwd`
-    fi
-fi
-
-if [ x"$cover" == x"yes" ];then
-    if [ x"`ls ./${file_name}.*`" != x"" ];then
-        rm ./${file_name}.*
-    fi
-fi
-
-file_suffix=null
-if [ x"$file_type" == x"c" ];then
-    file_suffix=c
-elif [ x"$file_type" == x"c++" ] || [ x"$file_type" == x"cpp" ];then
-    file_suffix=cpp
-else
-    file_suffix=c
-fi 
-
-if [ x"$OnlyHead" == x"yes" ];then
-    cfile_creat=0
-    echo "Only head file"
-fi
-
-
-cfile=0
-#1.2 创建文件
-if [ ! -e ${file_name}.${file_suffix} ] && [ "$cfile_creat" != "0" ];then
-    touch ${file_name}.${file_suffix}
-    cfile=1
-fi
-
-hfile=0
-if [ ! -e ${file_name}.h ];then
-    touch ${file_name}.h
-    hfile=1
-fi
-
-#获取当前系统时间
+# 4.2 基本变量保存
+# 4.2.1 获取当前系统时间
 ls_date=`date +%Y-%m-%d`
 year=`date +%Y`
 # echo $ls_date
 
+# 4.2.2 获取主机名
 name=`hostname`
 # echo $name
 
-UPPERCASE=$(echo ${file_name} | tr '[a-z]' '[A-Z]') 
+# 4.2.3 转为大写字母
+UPPERCASE=$(echo ${opt_file_name} | tr '[a-z]' '[A-Z]') 
 # echo $UPPERCASE
+
+# 4.2.4 这是为了加宏的后缀
 H=_H
 
-# 首字母大写
-class_name=`echo ${file_name} | sed -e "s/\b\(.\)/\u\1/g"`
-echo "----------- ${class_name}"
+# 4.2.5 类名首字母大写
+class_name=`echo ${opt_file_name} | sed -e "s/\b\(.\)/\u\1/g"`
+# echo "class_name ${class_name}"
+
+
+# 4.3 判断文件和文件夹
+# echo "opt_file_name ${opt_opt_file_name}"
+# echo "opt_file_comment ${opt_opt_file_comment}"
+# echo "file_path ${opt_file_path}"
+# echo "file_type ${opt_file_type}"
+# echo "OnlyHead ${opt_OnlyHead}"
+# echo "cover ${opt_cover}"
+# echo "addr ${opt_addr}"
+
+# 4.3.1 处理文件类型
+src_file_suffix=null
+h_file_suffix=null
+if [ x"$opt_file_type" == x"c" ];then
+    src_file_suffix=c
+    h_file_suffix=h
+elif [ x"$opt_file_type" == x"c++" ] || [ x"$opt_file_type" == x"cpp" ];then
+    src_file_suffix=cpp
+    h_file_suffix=h
+elif [ x"$opt_file_type" == x"go" ];then
+    src_file_suffix=go
+elif [ x"$opt_file_type" == x"js" ];then
+    src_file_suffix=js
+elif [ x"$opt_file_type" == x"html" ];then
+    src_file_suffix=html
+elif [ x"$opt_file_type" == x"css" ];then
+    src_file_suffix=css
+else
+    src_file_suffix=c
+    echo "文件类型不存在，使用默认的c"
+fi 
+
+# 4.3.2 处理头文件
+if [ x"$opt_OnlyHead" == x"yes" ];then
+    h_file_suffix=null
+    echo "Only head file"
+fi
+
+# 4.3.3 创建文件夹
+if [ x"$opt_file_path" != x"null" ];then
+    if [ ! -d $opt_file_path ];then
+        mkdir -p $opt_file_path
+        cd $opt_file_path
+    fi
+    cd $opt_file_path
+    echo "当前路径 `pwd`"
+fi
+
+# 4.3.4 如果需要覆盖就删除
+if [ -e ${opt_file_name}.${src_file_suffix} ];then
+    if [ x"$opt_cover" == x"yes" ];then
+        rm ${opt_file_name}.${src_file_suffix}
+    else 
+        echo "${opt_file_name}.${src_file_suffix} file existed"
+        exit
+    fi
+fi
+
+if [ x"${h_file_suffix}" != x"null" ] && [ -e ${opt_file_name}.${h_file_suffix} ];then
+    if [ x"$opt_cover" == x"yes" ];then
+        rm ${opt_file_name}.${h_file_suffix}
+    else 
+        echo "${opt_file_name}.${h_file_suffix} file existed"
+        exit
+    fi
+fi
+
+
+# 4.3.5 创建文件
+if [ ! -e ${opt_file_name}.${src_file_suffix} ];then
+    touch ${opt_file_name}.${src_file_suffix}
+fi
+
+if [ x"${h_file_suffix}" != x"null" ] && [ ! -e ${opt_file_name}.${h_file_suffix} ];then
+    touch ${opt_file_name}.${h_file_suffix}
+fi
+
+# 4.3.6 把后缀类型转为大写字母，然后匹配src类型
+src_file_prefix=$(echo ${src_file_suffix} | tr '[a-z]' '[A-Z]') 
+echo "src_file_prefix ${src_file_prefix}"
+
 
 #################################
-########   下面为模板文件 ########
+########   5:配置模板区 ##########
 #################################
 
-C_SRC_FILE="/**
+############## 5.0: 公共文件模板  ###################
+COMM_SRC_FILE_HEAD="/**
     ******************************************************************************
-    * @file    ${file_name}.${file_suffix}
+    * @file    ${opt_file_name}.${src_file_suffix}
     * @author  $name
     * @version V1.0.0
     * @date    $ls_date
-    * @brief   ${file_comment}
+    * @brief   ${opt_file_comment}
     ******************************************************************************
     * @attention
     *
     *
     ******************************************************************************
     */ 
+"
 
-/* Includes ------------------------------------------------------------------*/
-#include \"${file_name}.h\"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <assert.h>
-
-/** @addtogroup DataStruct_Driver
-    * @{
-    */
-
-/** @addtogroup ${file_name}
-    * @{
-    */
-
+COMM_SRC_FILE_DEFINE="
 /* Private typedef -----------------------------------------------------------*/
 
 /* Private define ------------------------------------------------------------*/
@@ -247,100 +301,22 @@ C_SRC_FILE="/**
 /* Private function prototypes -----------------------------------------------*/
 
 /* Private functions ---------------------------------------------------------*/
-
-
-/**
-    * @}
-    */
-
-/**
-    * @}
-    */
-
-/************************ (C) $year $addr *****END OF FILE****/
 "
 
-CPP_SRC_FILE="/**
-    ******************************************************************************
-    * @file    ${file_name}.${file_suffix}
-    * @author  $name
-    * @version V1.0.0
-    * @date    $ls_date
-    * @brief   ${file_comment}
-    ******************************************************************************
-    * @attention
-    *
-    *
-    ******************************************************************************
-    */ 
-
-/* Includes ------------------------------------------------------------------*/
-#include \"${file_name}.h\"
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <assert.h>
-
-/** @addtogroup DataStruct_Driver
-    * @{
-    */
-
-/** @addtogroup ${file_name}
-    * @{
-    */
-
-/* Private typedef -----------------------------------------------------------*/
-
-/* Private define ------------------------------------------------------------*/
-
-/* Private macro -------------------------------------------------------------*/
-
-/* Private variables ---------------------------------------------------------*/
-
-/* Private function prototypes -----------------------------------------------*/
-
-/* Private functions ---------------------------------------------------------*/
+COMM_SRC_FILE_TAIL="
 
 
-/**
-    * @brief  ${file_name}构造函数
-    * @param  
-    * @retval 
-    */ 
-${file_name}::${file_name}()
-{
-
-}    
-
-/**
-    * @brief  ${file_name}析构函数
-    * @param  
-    * @retval 
-    */ 
-${file_name}::~${file_name}()
-{
-
-}
-
-/**
-    * @}
-    */
-
-/**
-    * @}
-    */
-
-/************************ (C) $year $addr *****END OF FILE****/
+/************************ (C) $year $opt_addr *****END OF FILE****/
 "
 
 
-C_HEAD_FILE="/**
+COMM_HEAD_FILE_HEAD="/**
     ******************************************************************************
-    * @file    ${file_name}.h
+    * @file    ${opt_file_name}.${h_file_suffix}
     * @author  $name
     * @version V1.0.0
     * @date    $ls_date
-    * @brief   ${file_comment}
+    * @brief   ${opt_file_comment}
     ******************************************************************************
     * @attention
     *
@@ -357,16 +333,10 @@ C_HEAD_FILE="/**
 #endif
 
 /* Includes ------------------------------------------------------------------*/
+"
 
 
-/** @addtogroup DataStruct_Driver
-    * @{
-    */
-
-/** @addtogroup ${file_name}
-    * @{
-    */
-
+COMM_HEAD_FILE_DEFINE="
 /* Exported types ------------------------------------------------------------*/
 
 /* Exported constants --------------------------------------------------------*/
@@ -374,15 +344,9 @@ C_HEAD_FILE="/**
 /* Exported macro ------------------------------------------------------------*/
 
 /* Exported functions --------------------------------------------------------*/ 
+"
 
-
-/**
-    * @}
-    */
-
-/**
-    * @}
-    */
+COMM_HEAD_FILE_TAIL="
 
 
 #ifdef __cplusplus
@@ -391,32 +355,117 @@ C_HEAD_FILE="/**
 
 #endif /* __$UPPERCASE$H */
 
-/******************* (C) $year $addr *****END OF FILE****/
+/******************* (C) $year $opt_addr *****END OF FILE****/
 "
 
-CPP_HEAD_FILE="/**
-    ******************************************************************************
-    * @file    ${file_name}.h
-    * @author  $name
-    * @version V1.0.0
-    * @date    $ls_date
-    * @brief   ${file_comment}
-    ******************************************************************************
-    * @attention
-    *
-    *
-    ******************************************************************************
-    */ 
-
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __$UPPERCASE$H
-#define __$UPPERCASE$H
-
-#ifdef __cplusplus
-    extern \"C\" {
-#endif
+############## 5.1: c文件模板  ###################
+C_SRC_FILE="${COMM_SRC_FILE_HEAD}
 
 /* Includes ------------------------------------------------------------------*/
+#include \"${opt_file_name}.h\"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <assert.h>
+
+/** @addtogroup DataStruct_Driver
+    * @{
+    */
+
+/** @addtogroup ${opt_file_name}
+    * @{
+    */
+
+${COMM_SRC_FILE_DEFINE}
+
+/**
+    * @}
+    */
+
+/**
+    * @}
+    */
+
+${COMM_SRC_FILE_TAIL}
+"
+
+C_HEAD_FILE="${COMM_HEAD_FILE_HEAD}
+
+/** @addtogroup DataStruct_Driver
+    * @{
+    */
+
+/** @addtogroup ${opt_file_name}
+    * @{
+    */
+
+${COMM_HEAD_FILE_DEFINE}
+
+/**
+    * @}
+    */
+
+/**
+    * @}
+    */
+
+${COMM_HEAD_FILE_TAIL}
+"
+
+############## 5.2: c++文件模板  ###################
+CPP_SRC_FILE="${COMM_SRC_FILE_HEAD}
+
+/* Includes ------------------------------------------------------------------*/
+#include \"${opt_file_name}.h\"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <assert.h>
+
+/** @addtogroup DataStruct_Driver
+    * @{
+    */
+
+/** @addtogroup ${opt_file_name}
+    * @{
+    */
+
+${COMM_SRC_FILE_DEFINE}
+
+
+/**
+    * @brief  ${opt_file_name}构造函数
+    * @param  
+    * @retval 
+    */ 
+${opt_file_name}::${opt_file_name}()
+{
+
+}    
+
+/**
+    * @brief  ${opt_file_name}析构函数
+    * @param  
+    * @retval 
+    */ 
+${opt_file_name}::~${opt_file_name}()
+{
+
+}
+
+
+/**
+    * @}
+    */
+
+/**
+    * @}
+    */
+
+${COMM_SRC_FILE_TAIL}
+"
+
+CPP_HEAD_FILE="${COMM_HEAD_FILE_HEAD}
 
 
 /** @addtogroup ${class_name}
@@ -434,63 +483,77 @@ class ${class_name}
 
 };
 
-
-/* Exported types ------------------------------------------------------------*/
-
-/* Exported constants --------------------------------------------------------*/
-
-/* Exported macro ------------------------------------------------------------*/
-
-/* Exported functions --------------------------------------------------------*/ 
+${COMM_HEAD_FILE_DEFINE}
 
 
 /**
     * @}
     */
 
-#ifdef __cplusplus
-}
-#endif
+${COMM_HEAD_FILE_TAIL}
+"
 
-#endif /* __$UPPERCASE$H */
+############## 5.3: go文件模板  ###################
+GO_SRC_FILE="${COMM_SRC_FILE_HEAD}
 
-/******************* (C) $year $addr *****END OF FILE****/
+/* package ------------------------------------------------------------------*/
+package main
+
+import (
+	\"fmt\"
+	\"net\"
+)
+
+/** @addtogroup DataStruct_Driver
+    * @{
+    */
+
+/** @addtogroup ${opt_file_name}
+    * @{
+    */
+
+${COMM_SRC_FILE_DEFINE}
+
+
+/**
+    * @}
+    */
+
+/**
+    * @}
+    */
+
+${COMM_SRC_FILE_TAIL}
 "
 
 
 #################################
-########  写文件  ################
+########   6:写入文件 ############
 #################################
-if [ $cfile -eq 1 ];
-then
+# 6.1.1 写入资源文件
+if [ x"$src_file_suffix" == x"c" ];then
+    echo "${C_SRC_FILE}" >> ${opt_file_name}.${src_file_suffix}
+elif [ x"$src_file_suffix" == x"cpp" ];then
+    echo "${CPP_SRC_FILE}" >> ${opt_file_name}.${src_file_suffix}
+elif [ x"$src_file_suffix" == x"go" ];then
+    echo "${GO_SRC_FILE}" >> ${opt_file_name}.${src_file_suffix}
+elif [ x"$src_file_suffix" == x"js" ];then
+    echo "${JS_SRC_FILE}" >> ${opt_file_name}.${src_file_suffix}
+elif [ x"$src_file_suffix" == x"html" ];then
+    echo "${HTML_SRC_FILE}" >> ${opt_file_name}.${src_file_suffix}
+elif [ x"$src_file_suffix" == x"css" ];then
+    echo "${CSS_SRC_FILE}" >> ${opt_file_name}.${src_file_suffix}
+fi 
+echo "`date '+%Y-%m-%d %H:%M:%S'` create ${opt_file_name}.${src_file_suffix} finish"
 
-    if [ x"${file_suffix}" == x"c" ];then
-        echo "${C_SRC_FILE}" >> ${file_name}.c
-        echo "aa"
-    elif [ x"${file_suffix}" == x"cpp" ];then
-        echo "${CPP_SRC_FILE}" >> ${file_name}.cpp
-        echo "gg"
-    fi
 
-echo "`date '+%Y-%m-%d %H:%M:%S'` create ${file_name}.${file_suffix} finish"
-else 
-    if [ "$cfile_creat" == "0" ];then
-        echo "No need to create ${file_name}.${file_suffix} file"
-    else
-        echo "${file_name}.${file_suffix} file existed"
-    fi
-fi
-
-#写h文件
-if [ $hfile -eq 1 ];
-then
-    if [ x"${file_suffix}" == x"c" ];then
-        echo "${C_HEAD_FILE}" >> ${file_name}.h
-    elif [ x"${file_suffix}" == x"cpp" ];then
-        echo "${CPP_HEAD_FILE}" >> ${file_name}.h
-    fi
-
-echo "`date '+%Y-%m-%d %H:%M:%S'` create ${file_name}.h finish"
-else
-echo "${file_name}.h file existed"
-fi
+# 6.1.2  写入头文件
+if [ x"$h_file_suffix" == x"null" ];then
+    echo "不用创建头文件"
+    exit 0
+elif [ x"$src_file_suffix" == x"cpp" ];then
+    echo "${CPP_HEAD_FILE}" >> ${opt_file_name}.${h_file_suffix}
+elif [ x"$src_file_suffix" == x"c" ];then
+    echo "${C_HEAD_FILE}" >> ${opt_file_name}.${h_file_suffix}
+fi 
+echo "`date '+%Y-%m-%d %H:%M:%S'` create ${opt_file_name}.${h_file_suffix} finish"
